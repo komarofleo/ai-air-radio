@@ -68,6 +68,23 @@ async def openai_chat(
                 )
                 if response.status_code != 429:
                     break
+                # Distinguish quota exhaustion from transient rate limits.
+                err_code = None
+                try:
+                    err_payload = response.json().get("error") or {}
+                    err_code = err_payload.get("code") or err_payload.get("type")
+                except (ValueError, TypeError, AttributeError):
+                    err_code = None
+                if err_code in {
+                    "insufficient_quota",
+                    "credit_balance_exhausted",
+                }:
+                    logger.warning(
+                        "openai quota exhausted code=%s model=%s",
+                        err_code,
+                        settings.openai_model,
+                    )
+                    return None
                 retry_after = response.headers.get("retry-after", "20")
                 try:
                     wait_for = min(60.0, float(retry_after) + 1.0)
@@ -82,7 +99,7 @@ async def openai_chat(
                 await asyncio.sleep(wait_for)
             assert response is not None
             if response.status_code >= 400:
-                # Never log response bodies (may include request echoes).
+                # Never log full response bodies (may include request echoes).
                 logger.warning(
                     "openai http_status=%s model=%s",
                     response.status_code,
