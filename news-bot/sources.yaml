@@ -1,0 +1,33 @@
+# RSS sources for AI music / Suno / generative music news.
+# Edit on VDS and: systemctl restart aiair-news-bot
+
+sources:
+  - name: google-news-suno
+    type: rss
+    enabled: true
+    url: "https://news.google.com/rss/search?q=Suno+AI+music&hl=en-US&gl=US&ceid=US:en"
+
+  - name: google-news-ai-music
+    type: rss
+    enabled: true
+    url: "https://news.google.com/rss/search?q=%22AI+music%22+OR+%22generative+music%22+OR+Udio&hl=en-US&gl=US&ceid=US:en"
+
+  - name: google-news-ai-radio
+    type: rss
+    enabled: true
+    url: "https://news.google.com/rss/search?q=%22AI+radio%22+OR+%22AI+DJ%22&hl=en-US&gl=US&ceid=US:en"
+
+  - name: hacker-news-ai-music
+    type: rss
+    enabled: true
+    url: "https://hnrss.org/newest?q=Suno+OR+Udio+OR+%22AI+music%22"
+
+  - name: reddit-suno
+    type: rss
+    enabled: false
+    url: "https://www.reddit.com/r/SunoAI/.rss"
+
+  - name: google-news-ru-suno
+    type: rss
+    enabled: true
+    url: "https://news.google.com/rss/search?q=Suno+OR+%22%D0%98%D0%98+%D0%BC%D1%83%D0%B7%D1%8B%D0%BA%D0%B0%22&hl=ru&gl=RU&ceid=RU:ru"
