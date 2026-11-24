@@ -1,0 +1,25 @@
+[Unit]
+Description=AI Air Telegram news bot (isolated; do not use for other bots)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=aiair-news
+Group=aiair-news
+WorkingDirectory=/opt/aiair-news-bot
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/aiair-news-bot/.env
+ExecStart=/opt/aiair-news-bot/.venv/bin/python -m app
+Restart=always
+RestartSec=30
+# Hardening (safe defaults; does not affect other units)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aiair-news-bot /opt/aiair-news-bot
+
+[Install]
+WantedBy=multi-user.target
