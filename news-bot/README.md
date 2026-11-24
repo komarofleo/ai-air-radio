@@ -26,11 +26,32 @@ This unit is **standalone**. Do not edit or restart unrelated bots/services.
 ```bash
 cp .env.example .env
 chmod 600 .env
-# edit TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, topics, batch, interval
+# edit TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, schedule, batch, mix
 # edit sources.yaml as needed
 ```
 
-Defaults: `BATCH_SIZE=2`, `INTERVAL_MINUTES=360` (6h).
+### Publish schedule
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `PUBLISH_MODE` | `cron` | `cron` or `interval` |
+| `PUBLISH_CRON` | `0 11 * * mon,wed,fri` | 5-field cron (min hour dom mon dow) |
+| `PUBLISH_TIMEZONE` | `Europe/Moscow` | IANA timezone for cron |
+| `INTERVAL_MINUTES` | `360` | Used only when `PUBLISH_MODE=interval` |
+| `BATCH_SIZE` | `4` | Posts per publish tick |
+| `COLLECT_INTERVAL_MINUTES` | `30` | RSS collect cadence |
+
+Default live schedule: **Mon/Wed/Fri 11:00 MSK**, 4 posts per tick.
+
+### Batch mix (Suno vs other)
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `SUNO_MIN_PER_BATCH` | `1` | Preferred minimum Suno posts (best-effort) |
+| `SUNO_MAX_PER_BATCH` | `2` | Cap Suno posts in a batch |
+| `SUNO_KEYWORDS` | `suno` | Comma-separated markers in title/summary/url |
+
+Fail-soft: if fewer Suno items are queued, the rest of the batch is filled from other AI-music posts (and vice versa).
 
 ## Run locally
 
@@ -58,13 +79,15 @@ Restart after config changes:
 sudo systemctl restart aiair-news-bot
 ```
 
+On start the log line `next_publish=...` shows the next cron fire time.
+
 ## Telegram group
 
 Bot `@aiairbot_bot` must be a member of the target group/channel with permission to post. Chat id uses the `-100…` supergroup form.
 
 ## Ops notes
 
-- Change topics / batch / interval → edit `.env` → `systemctl restart aiair-news-bot`
+- Change schedule / batch / mix → edit `.env` → `systemctl restart aiair-news-bot`
 - Add RSS → edit `sources.yaml` → restart
 - Pause publishing without stopping collect → `PUBLISH_ENABLED=false` + restart
 - Dry run → `DRY_RUN=true` + restart

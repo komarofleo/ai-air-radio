@@ -6,9 +6,13 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiogram.exceptions import TelegramRetryAfter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import Settings
 from app.db import Database
@@ -23,6 +27,29 @@ def setup_logging(level: str) -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         stream=sys.stdout,
     )
+
+
+def _build_publish_trigger(settings: Settings) -> CronTrigger | IntervalTrigger:
+    """Create publish trigger from cron or interval settings."""
+    if settings.publish_mode == "cron":
+        return CronTrigger.from_crontab(
+            settings.publish_cron,
+            timezone=settings.publish_timezone,
+        )
+    return IntervalTrigger(minutes=settings.interval_minutes)
+
+
+def _next_fire_iso(scheduler: AsyncIOScheduler, job_id: str, tz_name: str) -> str:
+    """Format next fire time for a job in the given timezone."""
+    job = scheduler.get_job(job_id)
+    if job is None or job.next_run_time is None:
+        return "unknown"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:  # noqa: BLE001 — fall back to stored tz
+        return job.next_run_time.isoformat()
+    local = job.next_run_time.astimezone(tz)
+    return local.strftime("%Y-%m-%d %H:%M %Z")
 
 
 async def async_main(argv: list[str] | None = None) -> int:
@@ -83,21 +110,25 @@ async def async_main(argv: list[str] | None = None) -> int:
             logger.info("publish-only sent=%s", sent)
             return 0
 
-        # Daemon: skip getMe to avoid Telegram flood control loops.
         logger.info(
-            "daemon starting openai=%s model=%s batch=%s interval=%sm",
+            "daemon starting openai=%s model=%s batch=%s mode=%s "
+            "cron=%r tz=%s interval=%sm suno_mix=%s-%s",
             settings.openai_enabled,
             settings.openai_model if settings.openai_enabled else "-",
             settings.batch_size,
+            settings.publish_mode,
+            settings.publish_cron,
+            settings.publish_timezone,
             settings.interval_minutes,
+            settings.suno_min_per_batch,
+            settings.suno_max_per_batch,
         )
 
         if args.once:
             await run_once(bot, db, settings)
             return 0
 
-        # Daemon: schedule collect and publish on separate intervals.
-        scheduler = AsyncIOScheduler()
+        scheduler = AsyncIOScheduler(timezone=settings.publish_timezone)
         scheduler.add_job(
             run_collect_cycle,
             "interval",
@@ -107,24 +138,30 @@ async def async_main(argv: list[str] | None = None) -> int:
             max_instances=1,
             coalesce=True,
         )
+        publish_trigger = _build_publish_trigger(settings)
         scheduler.add_job(
             run_publish_cycle,
-            "interval",
-            minutes=settings.interval_minutes,
+            trigger=publish_trigger,
             args=[bot, db, settings],
             id="publish",
             max_instances=1,
             coalesce=True,
         )
         scheduler.start()
-        logger.info(
-            "scheduler started collect_every=%sm publish_every=%sm batch=%s",
-            settings.collect_interval_minutes,
-            settings.interval_minutes,
-            settings.batch_size,
+        next_publish = _next_fire_iso(
+            scheduler, "publish", settings.publish_timezone
         )
-        # Warm-up collect only. First publish waits for the scheduled interval
-        # (avoids Telegram flood loops on rapid restarts).
+        logger.info(
+            "scheduler started collect_every=%sm publish_mode=%s "
+            "publish_cron=%r tz=%s batch=%s next_publish=%s",
+            settings.collect_interval_minutes,
+            settings.publish_mode,
+            settings.publish_cron if settings.publish_mode == "cron" else "-",
+            settings.publish_timezone,
+            settings.batch_size,
+            next_publish,
+        )
+        # Warm-up collect only; first publish waits for cron/interval.
         await run_collect_cycle(db, settings)
 
         stop = asyncio.Event()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import Field, field_validator
@@ -40,13 +40,26 @@ class Settings(BaseSettings):
     database_path: Path = Path("/var/lib/aiair-news-bot/bot.db")
     sources_path: Path = Path("/opt/aiair-news-bot/sources.yaml")
 
-    batch_size: int = Field(default=2, ge=1, le=20)
+    batch_size: int = Field(default=4, ge=1, le=20)
+    # Fallback when PUBLISH_MODE=interval
     interval_minutes: int = Field(default=360, ge=5)
     collect_interval_minutes: int = Field(default=30, ge=5)
     llm_max_per_cycle: int = Field(default=8, ge=0, le=50)
     publish_enabled: bool = True
     translate_enabled: bool = True
     dry_run: bool = False
+
+    # Publish schedule: cron (default) or interval
+    publish_mode: Literal["cron", "interval"] = "cron"
+    # Standard 5-field cron: minute hour day month day_of_week
+    # Default: Mon/Wed/Fri 11:00
+    publish_cron: str = "0 11 * * mon,wed,fri"
+    publish_timezone: str = "Europe/Moscow"
+
+    # Batch mix: aim for 1–2 Suno posts, fill rest from other AI-music items
+    suno_min_per_batch: int = Field(default=1, ge=0, le=20)
+    suno_max_per_batch: int = Field(default=2, ge=0, le=20)
+    suno_keywords: str = "suno"
 
     topics: str = (
         "suno,udio,ai music,generative music,ai radio,"
@@ -61,10 +74,28 @@ class Settings(BaseSettings):
         """Treat blank API keys as unset."""
         return _blank_to_none(value)
 
+    @field_validator("publish_mode", mode="before")
+    @classmethod
+    def normalize_publish_mode(cls, value: Any) -> str:
+        """Normalize publish mode to cron|interval."""
+        text = str(value or "cron").strip().lower()
+        if text not in {"cron", "interval"}:
+            return "cron"
+        return text
+
     @property
     def topic_keywords(self) -> list[str]:
         """Parse comma-separated topic keywords."""
         return [part.strip().lower() for part in self.topics.split(",") if part.strip()]
+
+    @property
+    def suno_keyword_list(self) -> list[str]:
+        """Keywords that mark a post as Suno-focused."""
+        return [
+            part.strip().lower()
+            for part in self.suno_keywords.split(",")
+            if part.strip()
+        ]
 
     @property
     def openai_enabled(self) -> bool:

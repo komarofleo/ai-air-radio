@@ -224,18 +224,23 @@ class Database:
             """,
             (limit,),
         ).fetchall()
-        return [
-            QueuedPost(
-                id=int(row["id"]),
-                url=row["url"],
-                title=row["title"],
-                summary=row["summary"],
-                score=int(row["score"]),
-                status=row["status"],
-                language=row["language"],
-            )
-            for row in rows
-        ]
+        return [self._row_to_queued(row) for row in rows]
+
+    def fetch_queued_candidates(self, limit: int) -> list[QueuedPost]:
+        """Fetch a wider candidate window for mixed-batch selection."""
+        return self.fetch_queued(limit)
+
+    @staticmethod
+    def _row_to_queued(row: sqlite3.Row) -> QueuedPost:
+        return QueuedPost(
+            id=int(row["id"]),
+            url=row["url"],
+            title=row["title"],
+            summary=row["summary"],
+            score=int(row["score"]),
+            status=row["status"],
+            language=row["language"],
+        )
 
     def mark_sent(self, post_id: int, tg_message_id: int | None) -> None:
         """Mark post as sent and write publish log."""

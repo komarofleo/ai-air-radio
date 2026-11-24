@@ -10,6 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 
+from app.batch_mix import select_mixed_batch
 from app.config import Settings
 from app.db import Database, QueuedPost
 from app.summarizer import format_telegram_message
@@ -56,9 +57,21 @@ async def publish_batch(
         logger.info("publish disabled via PUBLISH_ENABLED=false")
         return 0
 
-    posts = db.fetch_queued(settings.batch_size)
-    if not posts:
+    # Wider candidate window so mix can pick Suno + non-Suno by score.
+    candidates = db.fetch_queued_candidates(max(settings.batch_size * 8, 40))
+    if not candidates:
         logger.info("publish queue empty")
+        return 0
+
+    posts = select_mixed_batch(
+        candidates,
+        batch_size=settings.batch_size,
+        suno_min=settings.suno_min_per_batch,
+        suno_max=settings.suno_max_per_batch,
+        suno_keywords=settings.suno_keyword_list,
+    )
+    if not posts:
+        logger.info("publish mix selected empty")
         return 0
 
     sent = 0
